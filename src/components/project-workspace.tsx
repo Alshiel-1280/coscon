@@ -9,6 +9,7 @@ export function ProjectWorkspace(props: {
   projectId: string;
   initialData: ProjectDetail;
   canIssueInviteLink: boolean;
+  memberSummary: string;
 }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -53,6 +54,30 @@ export function ProjectWorkspace(props: {
       return;
     }
     setNewCharacterTitle("");
+    await loadProject();
+  }
+
+  async function deleteCharacter(sceneId: string) {
+    const okDelete = window.confirm(
+      "このキャラを削除します。配下のショットとデータも削除されます。よろしいですか？",
+    );
+    if (!okDelete) {
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    setNotice(null);
+    const response = await fetch(`/api/scenes/${sceneId}`, {
+      method: "DELETE",
+    });
+    setSaving(false);
+    if (!response.ok) {
+      const body = (await response.json().catch(() => ({}))) as { error?: string };
+      setError(body.error ?? "キャラ削除に失敗しました。");
+      return;
+    }
+    setNotice("キャラを削除しました。");
     await loadProject();
   }
 
@@ -127,6 +152,28 @@ export function ProjectWorkspace(props: {
     await loadProject();
   }
 
+  async function deleteShot(shotId: string) {
+    const okDelete = window.confirm("このショットを削除します。よろしいですか？");
+    if (!okDelete) {
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    setNotice(null);
+    const response = await fetch(`/api/shots/${shotId}`, {
+      method: "DELETE",
+    });
+    setSaving(false);
+    if (!response.ok) {
+      const body = (await response.json().catch(() => ({}))) as { error?: string };
+      setError(body.error ?? "ショット削除に失敗しました。");
+      return;
+    }
+    setNotice("ショットを削除しました。");
+    await loadProject();
+  }
+
   async function issueInviteLink() {
     setIssuingInviteLink(true);
     setError(null);
@@ -170,6 +217,7 @@ export function ProjectWorkspace(props: {
             <p className="muted text-sm">
               撮影日: {data.project.shoot_date ?? "-"} / 場所: {data.project.location ?? "-"}
             </p>
+            <p className="muted text-sm">参加メンバー: {props.memberSummary}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <span className="badge">{data.project.status}</span>
@@ -236,7 +284,9 @@ export function ProjectWorkspace(props: {
             scene={scene}
             saving={saving}
             onAddShot={addShot}
+            onDeleteScene={deleteCharacter}
             onMoveShot={moveShot}
+            onDeleteShot={deleteShot}
             onUpdateShotStatus={updateShotStatus}
           />
         ))}
@@ -254,7 +304,9 @@ function CharacterCard(props: {
   scene: Scene;
   saving: boolean;
   onAddShot: (sceneId: string, title: string) => Promise<void>;
+  onDeleteScene: (sceneId: string) => Promise<void>;
   onMoveShot: (scene: Scene, index: number, direction: -1 | 1) => Promise<void>;
+  onDeleteShot: (shotId: string) => Promise<void>;
   onUpdateShotStatus: (shotId: string, status: string) => Promise<void>;
 }) {
   const [newShotTitle, setNewShotTitle] = useState("");
@@ -263,7 +315,17 @@ function CharacterCard(props: {
     <section className="panel p-4">
       <div className="mb-3 flex items-center justify-between gap-2">
         <h3 className="text-lg font-bold">{props.scene.title}</h3>
-        <span className="muted text-xs">キャラ内ショット: {(props.scene.shots ?? []).length}</span>
+        <div className="flex items-center gap-2">
+          <span className="muted text-xs">キャラ内ショット: {(props.scene.shots ?? []).length}</span>
+          <button
+            className="btn-outline text-sm text-[var(--danger)]"
+            type="button"
+            disabled={props.saving}
+            onClick={() => void props.onDeleteScene(props.scene.id)}
+          >
+            キャラ削除
+          </button>
+        </div>
       </div>
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -290,7 +352,7 @@ function CharacterCard(props: {
         {(props.scene.shots ?? []).map((shot, index) => (
           <div
             key={shot.id}
-            className="grid gap-2 rounded-lg border border-[var(--border)] bg-white p-3 md:grid-cols-[1fr_auto_auto_auto]"
+            className="grid gap-2 rounded-lg border border-[var(--border)] bg-white p-3 md:grid-cols-[1fr_auto_auto_auto_auto]"
           >
             <div>
               <Link className="link font-semibold" href={`/projects/${shot.project_id}/shots/${shot.id}`}>
@@ -301,6 +363,7 @@ function CharacterCard(props: {
             <select
               className={`select min-w-[110px] status-${shot.status}`}
               value={shot.status}
+              disabled={props.saving}
               onChange={(event) => props.onUpdateShotStatus(shot.id, event.target.value)}
             >
               {SHOT_STATUSES.map((status) => (
@@ -312,6 +375,7 @@ function CharacterCard(props: {
             <button
               className="btn-outline text-sm"
               type="button"
+              disabled={props.saving}
               onClick={() => props.onMoveShot(props.scene, index, -1)}
             >
               ↑
@@ -319,9 +383,18 @@ function CharacterCard(props: {
             <button
               className="btn-outline text-sm"
               type="button"
+              disabled={props.saving}
               onClick={() => props.onMoveShot(props.scene, index, 1)}
             >
               ↓
+            </button>
+            <button
+              className="btn-outline text-sm text-[var(--danger)]"
+              type="button"
+              disabled={props.saving}
+              onClick={() => void props.onDeleteShot(shot.id)}
+            >
+              削除
             </button>
           </div>
         ))}

@@ -4,8 +4,28 @@ import { TopNav } from "@/components/top-nav";
 import { ensureProfileForUser } from "@/lib/auth";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { getProjectDetailById, getProjectMembers } from "@/lib/server-data";
+import type { ProjectMember } from "@/types/app";
 
 export const dynamic = "force-dynamic";
+
+function buildMemberSummary(members: ProjectMember[]): string {
+  if (members.length === 0) {
+    return "参加メンバー情報なし";
+  }
+
+  const owner =
+    members.find((member) => member.role === "owner") ?? members[0];
+  const hostName =
+    owner.profile?.display_name?.trim() ||
+    owner.profile?.email ||
+    "ホスト";
+  const othersCount = Math.max(members.length - 1, 0);
+
+  if (othersCount === 0) {
+    return `${hostName}さん`;
+  }
+  return `${hostName}さんと他${othersCount}名...`;
+}
 
 export default async function ProjectDetailPage(props: {
   params: Promise<{ projectId: string }>;
@@ -22,6 +42,7 @@ export default async function ProjectDetailPage(props: {
   let loadError: string | null = null;
   let detail: Awaited<ReturnType<typeof getProjectDetailById>> | null = null;
   let canIssueInviteLink = false;
+  let memberSummary = "参加メンバー情報なし";
 
   try {
     await ensureProfileForUser(supabase, user);
@@ -31,6 +52,7 @@ export default async function ProjectDetailPage(props: {
       canIssueInviteLink = members.some(
         (member) => member.user_id === user.id && member.role === "owner",
       );
+      memberSummary = buildMemberSummary(members);
     }
   } catch (error) {
     loadError =
@@ -64,6 +86,7 @@ export default async function ProjectDetailPage(props: {
         projectId={params.projectId}
         initialData={detail}
         canIssueInviteLink={canIssueInviteLink}
+        memberSummary={memberSummary}
       />
     </main>
   );
