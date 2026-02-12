@@ -163,7 +163,7 @@ export function ProjectWorkspace(props: {
 
   return (
     <div className="space-y-4">
-      <section className="panel p-5">
+      <section className="panel sticky top-4 z-20 p-5 transition-shadow hover:shadow-lg">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="text-xl font-bold">{data.project.title}</h2>

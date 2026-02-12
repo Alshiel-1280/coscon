@@ -32,6 +32,7 @@ export default async function ProjectsPage() {
       <TopNav
         title="プロジェクト一覧"
         subtitle="コスプレ撮影ごとに絵コンテとライティングを管理"
+        user={user}
         rightSlot={
           <Link className="btn-primary text-sm" href="/projects/new">
             新規作成

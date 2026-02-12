@@ -16,7 +16,11 @@ export default async function ProjectNewPage() {
 
   return (
     <main className="page">
-      <TopNav title="プロジェクト作成" subtitle="Driveフォルダを自動作成します" />
+      <TopNav
+        title="プロジェクト作成"
+        subtitle="Driveフォルダを自動作成します"
+        user={user}
+      />
       <ProjectCreateForm />
     </main>
   );

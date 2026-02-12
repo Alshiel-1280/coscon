@@ -36,7 +36,7 @@ export default async function ShotDetailPage(props: {
   if (loadError) {
     return (
       <main className="page">
-        <TopNav title="ショット詳細" subtitle="読み込みエラー" />
+        <TopNav title="ショット詳細" subtitle="読み込みエラー" user={user} />
         <section className="panel p-6">
           <h2 className="text-lg font-bold">ショット詳細の読み込みに失敗しました</h2>
           <p className="mt-2 text-sm text-[var(--danger)]">{loadError}</p>
@@ -54,6 +54,7 @@ export default async function ShotDetailPage(props: {
       <TopNav
         title={`ショット詳細: ${workspace.shot.title}`}
         subtitle={workspace.project.title}
+        user={user}
       />
       <ShotDetailWorkspace
         projectId={workspace.project.id}

@@ -40,7 +40,7 @@ export default async function ProjectDetailPage(props: {
   if (loadError) {
     return (
       <main className="page">
-        <TopNav title="プロジェクト詳細" subtitle="読み込みエラー" />
+        <TopNav title="プロジェクト詳細" subtitle="読み込みエラー" user={user} />
         <section className="panel p-6">
           <h2 className="text-lg font-bold">プロジェクト詳細の読み込みに失敗しました</h2>
           <p className="mt-2 text-sm text-[var(--danger)]">{loadError}</p>
@@ -59,7 +59,7 @@ export default async function ProjectDetailPage(props: {
 
   return (
     <main className="page">
-      <TopNav title={detail.project.title} subtitle="キャラ管理 / ショット管理" />
+      <TopNav user={user} />
       <ProjectWorkspace
         projectId={params.projectId}
         initialData={detail}
