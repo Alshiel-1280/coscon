@@ -1,3 +1,5 @@
+export const APP_NAME = "コスコンテっ！";
+
 export const SHOT_STATUSES = [
   "構想",
   "未撮影",

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { MEMBER_ROLES, SHOT_STATUSES } from "@/lib/constants";
+import { SHOT_STATUSES } from "@/lib/constants";
 
 const shotStatusEnum = z.enum(SHOT_STATUSES);
 
@@ -54,9 +54,6 @@ export const lightingDiagramSchema = z.object({
 
 export const inviteMemberSchema = z.object({
   email: z.email().transform((value) => value.toLowerCase().trim()),
-  role: z.enum(MEMBER_ROLES).refine((role) => role !== "owner", {
-    message: "Invite role cannot be owner",
-  }),
 });
 
 export const exportProjectPdfSchema = z.object({

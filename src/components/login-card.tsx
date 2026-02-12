@@ -2,6 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
+import { APP_NAME } from "@/lib/constants";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 
 export function LoginCard() {
@@ -47,13 +49,24 @@ export function LoginCard() {
 
   return (
     <div className="panel mx-auto max-w-xl p-8">
-      <h1 className="mb-2 text-2xl font-bold">Googleでログイン</h1>
+      <h1 className="mb-2 text-2xl font-bold">{APP_NAME} にログイン</h1>
       <p className="muted mb-6 text-sm">
         Driveのプロジェクトフォルダと連携するため、Googleアカウントでサインインします。
       </p>
       <button className="btn-primary w-full" onClick={handleGoogleLogin} disabled={loading}>
-        {loading ? "接続中..." : "Googleでサインイン"}
+        {loading ? `${APP_NAME} に接続中...` : "Googleでサインイン"}
       </button>
+      <p className="muted mt-4 text-center text-xs">
+        ログインすることで
+        <Link className="link mx-1" href="/terms" target="_blank" rel="noreferrer">
+          利用規約
+        </Link>
+        と
+        <Link className="link mx-1" href="/privacy" target="_blank" rel="noreferrer">
+          プライバシーポリシー
+        </Link>
+        に同意したものとみなします。
+      </p>
       {error ? <p className="mt-3 text-sm text-[var(--danger)]">{error}</p> : null}
     </div>
   );

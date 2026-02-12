@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { APP_NAME } from "@/lib/constants";
 
 export function TopNav(props: {
   title: string;
@@ -8,7 +9,7 @@ export function TopNav(props: {
   return (
     <header className="mb-6 flex flex-wrap items-start justify-between gap-3">
       <div>
-        <p className="muted mb-1 text-sm">撮影絵コンテアプリ MVP</p>
+        <p className="muted mb-1 text-sm">{APP_NAME}</p>
         <h1 className="text-2xl font-bold text-[var(--text-main)]">{props.title}</h1>
         {props.subtitle ? <p className="muted mt-1 text-sm">{props.subtitle}</p> : null}
       </div>

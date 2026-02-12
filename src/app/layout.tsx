@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
+import { APP_NAME } from "@/lib/constants";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "撮影絵コンテアプリ",
-  description: "Cosplay shooting storyboard app MVP",
+  title: APP_NAME,
+  description: `${APP_NAME} | Cosplay storyboard app`,
 };
 
 export default function RootLayout({

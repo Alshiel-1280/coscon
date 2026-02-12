@@ -16,7 +16,6 @@ export function ProjectWorkspace(props: {
   const [members, setMembers] = useState<ProjectMember[]>(props.initialMembers);
   const [newCharacterTitle, setNewCharacterTitle] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState<"editor" | "viewer">("editor");
 
   async function loadProject() {
     const response = await fetch(`/api/projects/${props.projectId}`, {
@@ -148,7 +147,6 @@ export function ProjectWorkspace(props: {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         email: inviteEmail.trim().toLowerCase(),
-        role: inviteRole,
       }),
     });
     setSaving(false);
@@ -189,6 +187,7 @@ export function ProjectWorkspace(props: {
 
       <section className="panel space-y-3 p-5">
         <h3 className="text-lg font-bold">メンバー招待</h3>
+        <p className="muted text-xs">招待メンバーは全員「編集者」で追加されます。</p>
         <div className="flex flex-wrap items-center gap-2">
           <input
             className="input max-w-sm"
@@ -197,14 +196,6 @@ export function ProjectWorkspace(props: {
             value={inviteEmail}
             onChange={(event) => setInviteEmail(event.target.value)}
           />
-          <select
-            className="select max-w-[150px]"
-            value={inviteRole}
-            onChange={(event) => setInviteRole(event.target.value as "editor" | "viewer")}
-          >
-            <option value="editor">編集者 (editor)</option>
-            <option value="viewer">閲覧者 (viewer)</option>
-          </select>
           <button className="btn-primary" type="button" onClick={inviteMember} disabled={saving}>
             招待
           </button>

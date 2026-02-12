@@ -4,11 +4,8 @@ import { getAuthenticatedContext } from "@/lib/auth";
 import { fail, ok } from "@/lib/http";
 import { inviteMemberSchema } from "@/lib/validators";
 
-type AppRole = "owner" | "editor" | "viewer";
-
-function toDriveRole(role: AppRole): DrivePermissionRole {
-  return role === "viewer" ? "reader" : "writer";
-}
+const INVITE_MEMBER_ROLE = "editor" as const;
+const DRIVE_INVITE_ROLE: DrivePermissionRole = "writer";
 
 export async function POST(
   request: Request,
@@ -75,7 +72,7 @@ export async function POST(
         {
           project_id: projectId,
           user_id: profile.id,
-          role: parsed.data.role,
+          role: INVITE_MEMBER_ROLE,
           added_by: user.id,
         },
         {
@@ -93,7 +90,7 @@ export async function POST(
       accessToken: googleAccessToken,
       folderId: project.drive_folder_id,
       email: profile.email,
-      role: toDriveRole(parsed.data.role),
+      role: DRIVE_INVITE_ROLE,
     });
 
     return ok(
