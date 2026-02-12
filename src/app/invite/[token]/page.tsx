@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { APP_NAME } from "@/lib/constants";
+import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 
 type InviteState =
   | "loading"
@@ -67,6 +68,18 @@ export default function InviteAcceptPage() {
       }
 
       setPreview(previewBody.data);
+      const supabase = createBrowserSupabaseClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!active) {
+        return;
+      }
+      if (!user) {
+        setState("need-login");
+        return;
+      }
+
       setState("accepting");
       const acceptResponse = await fetch(`/api/invite-links/${encodeURIComponent(token)}/accept`, {
         method: "POST",

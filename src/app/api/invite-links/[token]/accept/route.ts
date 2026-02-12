@@ -16,6 +16,18 @@ function isInvalidInviteError(error: { code?: string; message?: string }): boole
   return message.includes("invalid") || message.includes("inactive");
 }
 
+function isInviteSchemaError(error: { code?: string; message?: string }): boolean {
+  if (error.code === "42702" || error.code === "42883") {
+    return true;
+  }
+  const message = (error.message ?? "").toLowerCase();
+  return (
+    message.includes("ambiguous") ||
+    message.includes("digest") ||
+    message.includes("accept_project_invite_link")
+  );
+}
+
 export async function POST(
   _request: Request,
   context: { params: Promise<{ token: string }> },
@@ -37,6 +49,12 @@ export async function POST(
       }
       if (error.code === "42501") {
         return fail("Unauthorized", 401);
+      }
+      if (isInviteSchemaError(error)) {
+        return fail(
+          "招待機能のDB更新が未反映です。管理者は docs/supabase_invite_link_ambiguous_hotfix.sql を実行してください。",
+          500,
+        );
       }
       return fail(error.message, 400);
     }

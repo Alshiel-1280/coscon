@@ -1,7 +1,7 @@
 -- 撮影絵コンテアプリ: Supabase(Postgres) MVP schema
 -- 前提: auth.users を利用
 
-create extension if not exists pgcrypto;
+create extension if not exists pgcrypto with schema extensions;
 
 -- enums
 do $$
@@ -252,6 +252,7 @@ language plpgsql
 security definer
 set search_path = public
 as $$
+#variable_conflict use_column
 declare
   v_user_id uuid := auth.uid();
   v_token_hash text;
@@ -267,7 +268,7 @@ begin
     raise exception 'Invalid invite token' using errcode = '22023';
   end if;
 
-  v_token_hash := encode(digest(_token, 'sha256'), 'hex');
+  v_token_hash := encode(extensions.digest(_token, 'sha256'::text), 'hex');
 
   select pil.project_id, p.title
     into v_project_id, v_project_title
@@ -302,7 +303,7 @@ begin
     set
       joined_count = joined_count + 1,
       last_joined_at = now()
-    where project_id = v_project_id;
+    where public.project_invite_links.project_id = v_project_id;
   end if;
 
   return query
@@ -325,7 +326,7 @@ as $$
   select pil.project_id, p.title as project_title
   from public.project_invite_links pil
   join public.projects p on p.id = pil.project_id
-  where pil.token_hash = encode(digest(_token, 'sha256'), 'hex')
+  where pil.token_hash = encode(extensions.digest(_token, 'sha256'::text), 'hex')
     and pil.is_active = true
   limit 1;
 $$;
