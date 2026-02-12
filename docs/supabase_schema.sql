@@ -313,6 +313,26 @@ $$;
 revoke all on function public.accept_project_invite_link(text) from public;
 grant execute on function public.accept_project_invite_link(text) to authenticated;
 
+create or replace function public.preview_project_invite_link(_token text)
+returns table (
+  project_id uuid,
+  project_title text
+)
+language sql
+security definer
+set search_path = public
+as $$
+  select pil.project_id, p.title as project_title
+  from public.project_invite_links pil
+  join public.projects p on p.id = pil.project_id
+  where pil.token_hash = encode(digest(_token, 'sha256'), 'hex')
+    and pil.is_active = true
+  limit 1;
+$$;
+
+revoke all on function public.preview_project_invite_link(text) from public;
+grant execute on function public.preview_project_invite_link(text) to anon, authenticated;
+
 -- profiles policy
 drop policy if exists profiles_self_select on public.profiles;
 drop policy if exists profiles_authenticated_select on public.profiles;

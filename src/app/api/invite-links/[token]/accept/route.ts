@@ -54,7 +54,11 @@ export async function POST(
       alreadyMember: row.already_member,
     });
   } catch (error) {
-    if (error instanceof Error && error.message === "Unauthorized") {
+    if (
+      error instanceof Error &&
+      (error.message === "Unauthorized" ||
+        error.message.toLowerCase().includes("auth session missing"))
+    ) {
       return fail("Unauthorized", 401);
     }
     return fail(error instanceof Error ? error.message : "Unexpected error", 500);
