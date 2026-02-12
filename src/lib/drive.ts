@@ -231,3 +231,53 @@ export async function shareDriveFolderWithUser(input: {
     fields: "id",
   });
 }
+
+export async function ensureDriveFolderSharedByLink(input: {
+  accessToken: string;
+  folderId: string;
+  role: "writer";
+}): Promise<{ permissionId: string }> {
+  const drive = createDriveApi(input.accessToken);
+  const list = await drive.permissions.list({
+    fileId: input.folderId,
+    fields: "permissions(id,type,role,allowFileDiscovery)",
+    supportsAllDrives: true,
+  });
+
+  const existing = list.data.permissions?.find((permission) => permission.type === "anyone");
+  if (!existing?.id) {
+    const created = await drive.permissions.create({
+      fileId: input.folderId,
+      requestBody: {
+        type: "anyone",
+        role: input.role,
+        allowFileDiscovery: false,
+      },
+      fields: "id",
+      supportsAllDrives: true,
+    });
+    if (!created.data.id) {
+      throw new Error("Failed to create Drive link-sharing permission.");
+    }
+    return {
+      permissionId: created.data.id,
+    };
+  }
+
+  if (existing.role !== input.role || existing.allowFileDiscovery !== false) {
+    await drive.permissions.update({
+      fileId: input.folderId,
+      permissionId: existing.id,
+      requestBody: {
+        role: input.role,
+        allowFileDiscovery: false,
+      },
+      fields: "id",
+      supportsAllDrives: true,
+    });
+  }
+
+  return {
+    permissionId: existing.id,
+  };
+}

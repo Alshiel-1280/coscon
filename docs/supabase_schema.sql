@@ -64,6 +64,22 @@ create table if not exists public.project_members (
 
 create index if not exists idx_project_members_user on public.project_members(user_id);
 
+-- project invite links (1 project = 1 active link)
+create table if not exists public.project_invite_links (
+  project_id uuid primary key references public.projects(id) on delete cascade,
+  token_hash text not null unique,
+  created_by uuid not null references public.profiles(id) on delete restrict,
+  drive_permission_id text,
+  is_active boolean not null default true,
+  joined_count integer not null default 0,
+  last_joined_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create unique index if not exists idx_project_invite_links_token_hash
+  on public.project_invite_links(token_hash);
+
 -- scenes
 create table if not exists public.scenes (
   id uuid primary key default gen_random_uuid(),
@@ -180,6 +196,10 @@ drop trigger if exists trg_projects_touch on public.projects;
 create trigger trg_projects_touch before update on public.projects
 for each row execute function public.touch_updated_at();
 
+drop trigger if exists trg_project_invite_links_touch on public.project_invite_links;
+create trigger trg_project_invite_links_touch before update on public.project_invite_links
+for each row execute function public.touch_updated_at();
+
 drop trigger if exists trg_scenes_touch on public.scenes;
 create trigger trg_scenes_touch before update on public.scenes
 for each row execute function public.touch_updated_at();
@@ -200,6 +220,7 @@ for each row execute function public.touch_updated_at();
 alter table public.profiles enable row level security;
 alter table public.projects enable row level security;
 alter table public.project_members enable row level security;
+alter table public.project_invite_links enable row level security;
 alter table public.scenes enable row level security;
 alter table public.shots enable row level security;
 alter table public.shot_assets enable row level security;
@@ -220,6 +241,77 @@ as $$
       and pm.user_id = _user_id
   );
 $$;
+
+create or replace function public.accept_project_invite_link(_token text)
+returns table (
+  project_id uuid,
+  project_title text,
+  already_member boolean
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_token_hash text;
+  v_project_id uuid;
+  v_project_title text;
+  v_already_member boolean;
+begin
+  if v_user_id is null then
+    raise exception 'Unauthorized' using errcode = '42501';
+  end if;
+
+  if _token is null or char_length(trim(_token)) = 0 then
+    raise exception 'Invalid invite token' using errcode = '22023';
+  end if;
+
+  v_token_hash := encode(digest(_token, 'sha256'), 'hex');
+
+  select pil.project_id, p.title
+    into v_project_id, v_project_title
+  from public.project_invite_links pil
+  join public.projects p on p.id = pil.project_id
+  where pil.token_hash = v_token_hash
+    and pil.is_active = true
+  limit 1;
+
+  if v_project_id is null then
+    raise exception 'Invite link is invalid or inactive' using errcode = 'P0002';
+  end if;
+
+  select exists (
+    select 1
+    from public.project_members pm
+    where pm.project_id = v_project_id
+      and pm.user_id = v_user_id
+  )
+  into v_already_member;
+
+  insert into public.project_members (project_id, user_id, role, added_by)
+  values (v_project_id, v_user_id, 'editor', null)
+  on conflict (project_id, user_id) do update
+  set role = case
+    when public.project_members.role = 'owner' then 'owner'
+    else 'editor'
+  end;
+
+  if not v_already_member then
+    update public.project_invite_links
+    set
+      joined_count = joined_count + 1,
+      last_joined_at = now()
+    where project_id = v_project_id;
+  end if;
+
+  return query
+  select v_project_id, v_project_title, v_already_member;
+end;
+$$;
+
+revoke all on function public.accept_project_invite_link(text) from public;
+grant execute on function public.accept_project_invite_link(text) to authenticated;
 
 -- profiles policy
 drop policy if exists profiles_self_select on public.profiles;
@@ -304,6 +396,59 @@ for delete using (
   exists (
     select 1 from public.projects p
     where p.id = project_members.project_id
+      and p.owner_user_id = auth.uid()
+  )
+);
+
+-- project invite links policy
+drop policy if exists invite_links_owner_select on public.project_invite_links;
+drop policy if exists invite_links_owner_insert on public.project_invite_links;
+drop policy if exists invite_links_owner_update on public.project_invite_links;
+drop policy if exists invite_links_owner_delete on public.project_invite_links;
+
+create policy invite_links_owner_select on public.project_invite_links
+for select using (
+  exists (
+    select 1
+    from public.projects p
+    where p.id = project_invite_links.project_id
+      and p.owner_user_id = auth.uid()
+  )
+);
+
+create policy invite_links_owner_insert on public.project_invite_links
+for insert with check (
+  exists (
+    select 1
+    from public.projects p
+    where p.id = project_invite_links.project_id
+      and p.owner_user_id = auth.uid()
+  )
+);
+
+create policy invite_links_owner_update on public.project_invite_links
+for update using (
+  exists (
+    select 1
+    from public.projects p
+    where p.id = project_invite_links.project_id
+      and p.owner_user_id = auth.uid()
+  )
+) with check (
+  exists (
+    select 1
+    from public.projects p
+    where p.id = project_invite_links.project_id
+      and p.owner_user_id = auth.uid()
+  )
+);
+
+create policy invite_links_owner_delete on public.project_invite_links
+for delete using (
+  exists (
+    select 1
+    from public.projects p
+    where p.id = project_invite_links.project_id
       and p.owner_user_id = auth.uid()
   )
 );

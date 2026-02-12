@@ -12,10 +12,14 @@ export function ProjectWorkspace(props: {
 }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [data, setData] = useState<ProjectDetail>(props.initialData);
   const [members, setMembers] = useState<ProjectMember[]>(props.initialMembers);
   const [newCharacterTitle, setNewCharacterTitle] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteLink, setInviteLink] = useState("");
+  const [inviteWarning, setInviteWarning] = useState("");
+  const [issuingInviteLink, setIssuingInviteLink] = useState(false);
 
   async function loadProject() {
     const response = await fetch(`/api/projects/${props.projectId}`, {
@@ -53,6 +57,7 @@ export function ProjectWorkspace(props: {
     }
     setSaving(true);
     setError(null);
+    setNotice(null);
     const response = await fetch(`/api/projects/${props.projectId}/scenes`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -74,6 +79,7 @@ export function ProjectWorkspace(props: {
     }
     setSaving(true);
     setError(null);
+    setNotice(null);
     const response = await fetch(`/api/scenes/${sceneId}/shots`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -91,6 +97,7 @@ export function ProjectWorkspace(props: {
   async function updateShotStatus(shotId: string, status: string) {
     setSaving(true);
     setError(null);
+    setNotice(null);
     const response = await fetch(`/api/shots/${shotId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -117,6 +124,7 @@ export function ProjectWorkspace(props: {
 
     setSaving(true);
     setError(null);
+    setNotice(null);
     const response = await fetch("/api/shots/reorder", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -142,6 +150,7 @@ export function ProjectWorkspace(props: {
     }
     setSaving(true);
     setError(null);
+    setNotice(null);
     const response = await fetch(`/api/projects/${props.projectId}/invite`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -156,7 +165,42 @@ export function ProjectWorkspace(props: {
       return;
     }
     setInviteEmail("");
+    setNotice("メンバーを招待しました。");
     await loadMembers();
+  }
+
+  async function issueInviteLink() {
+    setIssuingInviteLink(true);
+    setError(null);
+    setNotice(null);
+    const response = await fetch(`/api/projects/${props.projectId}/invite-link`, {
+      method: "POST",
+    });
+    const body = (await response.json().catch(() => ({}))) as {
+      data?: { inviteUrl?: string; warning?: string };
+      error?: string;
+    };
+    setIssuingInviteLink(false);
+    if (!response.ok || !body.data?.inviteUrl) {
+      setError(body.error ?? "招待リンクの発行に失敗しました。");
+      return;
+    }
+    setInviteLink(body.data.inviteUrl);
+    setInviteWarning(body.data.warning ?? "");
+    setNotice("招待リンクを発行しました。");
+  }
+
+  async function copyInviteLink() {
+    if (!inviteLink) {
+      return;
+    }
+    setError(null);
+    try {
+      await navigator.clipboard.writeText(inviteLink);
+      setNotice("招待リンクをコピーしました。");
+    } catch {
+      setError("クリップボードへのコピーに失敗しました。");
+    }
   }
 
   return (
@@ -183,6 +227,31 @@ export function ProjectWorkspace(props: {
             ) : null}
           </div>
         </div>
+      </section>
+
+      <section className="panel space-y-3 p-5">
+        <h3 className="text-lg font-bold">招待リンク発行</h3>
+        <p className="text-sm text-[var(--danger)]">
+          このリンクを知っている人は誰でもプロジェクト参加とDriveフォルダ編集が可能です。
+        </p>
+        <p className="text-sm text-[var(--danger)]">
+          リンクを再発行すると、旧リンクは無効になります。
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <button className="btn-primary" type="button" onClick={issueInviteLink} disabled={issuingInviteLink}>
+            {issuingInviteLink ? "発行中..." : inviteLink ? "リンクを再発行" : "リンクを発行"}
+          </button>
+          <button className="btn-outline text-sm" type="button" onClick={copyInviteLink} disabled={!inviteLink}>
+            コピー
+          </button>
+        </div>
+        <input
+          className="input"
+          readOnly
+          value={inviteLink}
+          placeholder="まだ招待リンクは発行されていません。"
+        />
+        {inviteWarning ? <p className="muted text-xs">{inviteWarning}</p> : null}
       </section>
 
       <section className="panel space-y-3 p-5">
@@ -215,6 +284,7 @@ export function ProjectWorkspace(props: {
         </div>
       </section>
 
+      {notice ? <p className="text-sm text-[var(--success)]">{notice}</p> : null}
       {error ? <p className="text-sm text-[var(--danger)]">{error}</p> : null}
 
       <section className="panel flex flex-wrap items-center gap-2 p-4">
