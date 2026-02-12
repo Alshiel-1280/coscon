@@ -259,26 +259,49 @@ for update using (
 
 -- project members policy
 drop policy if exists members_member_select on public.project_members;
-create policy members_member_select on public.project_members
-for select using (public.is_project_member(project_id, auth.uid()));
-
 drop policy if exists members_owner_manage on public.project_members;
-create policy members_owner_manage on public.project_members
-for all using (
-  exists (
-    select 1 from public.project_members pm
-    where pm.project_id = project_members.project_id
-      and pm.user_id = auth.uid()
-      and pm.role = 'owner'
+drop policy if exists members_owner_bootstrap_insert on public.project_members;
+drop policy if exists members_owner_insert on public.project_members;
+drop policy if exists members_owner_update on public.project_members;
+drop policy if exists members_owner_delete on public.project_members;
+
+create policy members_member_select on public.project_members
+for select using (
+  user_id = auth.uid()
+  or exists (
+    select 1 from public.projects p
+    where p.id = project_members.project_id
+      and p.owner_user_id = auth.uid()
   )
 );
 
-drop policy if exists members_owner_bootstrap_insert on public.project_members;
-create policy members_owner_bootstrap_insert on public.project_members
+create policy members_owner_insert on public.project_members
 for insert with check (
-  user_id = auth.uid()
-  and role = 'owner'
-  and exists (
+  exists (
+    select 1 from public.projects p
+    where p.id = project_members.project_id
+      and p.owner_user_id = auth.uid()
+  )
+);
+
+create policy members_owner_update on public.project_members
+for update using (
+  exists (
+    select 1 from public.projects p
+    where p.id = project_members.project_id
+      and p.owner_user_id = auth.uid()
+  )
+) with check (
+  exists (
+    select 1 from public.projects p
+    where p.id = project_members.project_id
+      and p.owner_user_id = auth.uid()
+  )
+);
+
+create policy members_owner_delete on public.project_members
+for delete using (
+  exists (
     select 1 from public.projects p
     where p.id = project_members.project_id
       and p.owner_user_id = auth.uid()

@@ -1,42 +1,50 @@
 import { NextRequest } from "next/server";
 import { getAuthenticatedContext } from "@/lib/auth";
-import { ASSET_KINDS } from "@/lib/constants";
 import { ensureProjectSubfolder, uploadFileToDrive } from "@/lib/drive";
 import { fail, ok } from "@/lib/http";
 import { readParams } from "@/lib/route";
 
-type AssetKind = (typeof ASSET_KINDS)[number];
+const ALLOWED_REFERENCE_MIME_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "application/pdf",
+]);
 
-function parseAssetKind(value: FormDataEntryValue | null): AssetKind {
-  if (typeof value !== "string") {
-    return "reference";
+function parseReferenceMimeType(file: File): string | null {
+  const mimeType = file.type.toLowerCase();
+  if (ALLOWED_REFERENCE_MIME_TYPES.has(mimeType)) {
+    return mimeType;
   }
-  return ASSET_KINDS.includes(value as AssetKind)
-    ? (value as AssetKind)
-    : "reference";
+
+  const lowerName = file.name.toLowerCase();
+  if (lowerName.endsWith(".jpg") || lowerName.endsWith(".jpeg")) {
+    return "image/jpeg";
+  }
+  if (lowerName.endsWith(".png")) {
+    return "image/png";
+  }
+  if (lowerName.endsWith(".pdf")) {
+    return "application/pdf";
+  }
+  return null;
 }
 
-function makeSafeFileName(name: string): string {
+function extensionByMimeType(mimeType: string): string {
+  if (mimeType === "image/png") {
+    return ".png";
+  }
+  if (mimeType === "application/pdf") {
+    return ".pdf";
+  }
+  return ".jpg";
+}
+
+function makeSafeFileName(name: string, mimeType: string): string {
   const normalized = name.replace(/[\\/:*?"<>|]/g, "_").trim();
   if (normalized.length === 0) {
-    return `asset_${Date.now()}.jpg`;
+    return `asset_${Date.now()}${extensionByMimeType(mimeType)}`;
   }
   return normalized.slice(0, 120);
-}
-
-function subfolderByKind(kind: AssetKind): "refs" | "edits" | "diagrams" | "exports" {
-  switch (kind) {
-    case "reference":
-      return "refs";
-    case "edit":
-      return "edits";
-    case "diagram_preview":
-      return "diagrams";
-    case "export":
-      return "exports";
-    default:
-      return "refs";
-  }
 }
 
 export async function GET(
@@ -77,7 +85,6 @@ export async function POST(
 
     const formData = await request.formData();
     const file = formData.get("file");
-    const kind = parseAssetKind(formData.get("kind"));
     if (!(file instanceof File)) {
       return fail("`file` is required", 400);
     }
@@ -85,9 +92,10 @@ export async function POST(
       return fail("Empty file is not allowed", 400);
     }
 
-    const mimeType = file.type || "application/octet-stream";
-    if ((kind === "reference" || kind === "edit") && mimeType !== "image/jpeg") {
-      return fail("Only JPEG is allowed for reference/edit uploads", 400);
+    const kind = "reference";
+    const mimeType = parseReferenceMimeType(file);
+    if (!mimeType) {
+      return fail("Only JPG / PNG / PDF are allowed", 400);
     }
 
     const { data: shot, error: shotError } = await supabase
@@ -108,17 +116,29 @@ export async function POST(
       return fail(projectError.message, 404);
     }
 
+    const { count: referenceAssetCount, error: countError } = await supabase
+      .from("shot_assets")
+      .select("id", { count: "exact", head: true })
+      .eq("shot_id", shotId)
+      .eq("kind", "reference");
+    if (countError) {
+      return fail(countError.message, 400);
+    }
+    if ((referenceAssetCount ?? 0) >= 3) {
+      return fail("参考画像は最大3枚までです。", 400);
+    }
+
     const folder = await ensureProjectSubfolder({
       accessToken: googleAccessToken,
       projectFolderId: project.drive_folder_id,
-      subfolder: subfolderByKind(kind),
+      subfolder: "refs",
     });
 
     const buffer = Buffer.from(await file.arrayBuffer());
     const uploaded = await uploadFileToDrive({
       accessToken: googleAccessToken,
       parentFolderId: folder.id,
-      fileName: makeSafeFileName(file.name),
+      fileName: makeSafeFileName(file.name, mimeType),
       mimeType,
       buffer,
     });

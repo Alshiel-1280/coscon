@@ -1,53 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
-import type {
-  Comment,
-  Deliverable,
-  ProjectDetail,
-  ProjectMember,
-  ProjectTabKey,
-  Scene,
-} from "@/types/app";
+import { useState } from "react";
 import { SHOT_STATUSES } from "@/lib/constants";
-
-type TabKey = ProjectTabKey;
-
-function tabLabel(tab: TabKey): string {
-  switch (tab) {
-    case "storyboard":
-      return "絵コンテ";
-    case "lighting":
-      return "ライティング";
-    case "comments":
-      return "コメント";
-    case "delivery":
-      return "納品";
-    default:
-      return tab;
-  }
-}
+import type { ProjectDetail, ProjectMember, Scene } from "@/types/app";
 
 export function ProjectWorkspace(props: {
   projectId: string;
-  initialTab: TabKey;
   initialData: ProjectDetail;
-  initialComments: Comment[];
   initialMembers: ProjectMember[];
-  initialDeliverables: Deliverable[];
 }) {
-  const [tab, setTab] = useState<TabKey>(props.initialTab);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<ProjectDetail>(props.initialData);
-  const [comments, setComments] = useState<Comment[]>(props.initialComments);
   const [members, setMembers] = useState<ProjectMember[]>(props.initialMembers);
-  const [deliverables, setDeliverables] = useState<Deliverable[]>(
-    props.initialDeliverables,
-  );
-  const [newSceneTitle, setNewSceneTitle] = useState("");
-  const [newComment, setNewComment] = useState("");
+  const [newCharacterTitle, setNewCharacterTitle] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<"editor" | "viewer">("editor");
 
@@ -66,21 +33,6 @@ export function ProjectWorkspace(props: {
     setData(body.data);
   }
 
-  async function loadComments() {
-    const response = await fetch(`/api/projects/${props.projectId}/comments`, {
-      cache: "no-store",
-    });
-    const body = (await response.json().catch(() => ({}))) as {
-      data?: Comment[];
-      error?: string;
-    };
-    if (!response.ok || !body.data) {
-      setError(body.error ?? "コメント取得に失敗しました。");
-      return;
-    }
-    setComments(body.data);
-  }
-
   async function loadMembers() {
     const response = await fetch(`/api/projects/${props.projectId}/members`, {
       cache: "no-store",
@@ -96,56 +48,33 @@ export function ProjectWorkspace(props: {
     setMembers(body.data);
   }
 
-  async function loadDeliverables() {
-    const response = await fetch(`/api/projects/${props.projectId}/deliverables`, {
-      cache: "no-store",
-    });
-    const body = (await response.json().catch(() => ({}))) as {
-      data?: Deliverable[];
-      error?: string;
-    };
-    if (!response.ok || !body.data) {
-      setError(body.error ?? "納品物取得に失敗しました。");
+  async function addCharacter() {
+    if (!newCharacterTitle.trim()) {
       return;
     }
-    setDeliverables(body.data);
-  }
-
-  const allShots = useMemo(() => {
-    return data.scenes.flatMap((scene) => scene.shots ?? []);
-  }, [data]);
-
-  async function switchTab(nextTab: TabKey) {
-    setTab(nextTab);
-    if (nextTab === "comments") {
-      await loadComments();
-    }
-    if (nextTab === "delivery") {
-      await loadDeliverables();
-    }
-  }
-
-  async function addScene() {
-    if (!newSceneTitle.trim()) return;
     setSaving(true);
+    setError(null);
     const response = await fetch(`/api/projects/${props.projectId}/scenes`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: newSceneTitle.trim() }),
+      body: JSON.stringify({ title: newCharacterTitle.trim() }),
     });
     setSaving(false);
     if (!response.ok) {
       const body = (await response.json().catch(() => ({}))) as { error?: string };
-      setError(body.error ?? "シーン追加に失敗しました。");
+      setError(body.error ?? "キャラ追加に失敗しました。");
       return;
     }
-    setNewSceneTitle("");
+    setNewCharacterTitle("");
     await loadProject();
   }
 
   async function addShot(sceneId: string, title: string) {
-    if (!title.trim()) return;
+    if (!title.trim()) {
+      return;
+    }
     setSaving(true);
+    setError(null);
     const response = await fetch(`/api/scenes/${sceneId}/shots`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -162,6 +91,7 @@ export function ProjectWorkspace(props: {
 
   async function updateShotStatus(shotId: string, status: string) {
     setSaving(true);
+    setError(null);
     const response = await fetch(`/api/shots/${shotId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -179,21 +109,24 @@ export function ProjectWorkspace(props: {
   async function moveShot(scene: Scene, index: number, direction: -1 | 1) {
     const shots = [...(scene.shots ?? [])];
     const target = index + direction;
-    if (target < 0 || target >= shots.length) return;
+    if (target < 0 || target >= shots.length) {
+      return;
+    }
     const tmp = shots[index];
     shots[index] = shots[target];
     shots[target] = tmp;
-    const payload = {
-      items: shots.map((shot, idx) => ({
-        id: shot.id,
-        sortOrder: idx,
-      })),
-    };
+
     setSaving(true);
+    setError(null);
     const response = await fetch("/api/shots/reorder", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        items: shots.map((shot, order) => ({
+          id: shot.id,
+          sortOrder: order,
+        })),
+      }),
     });
     setSaving(false);
     if (!response.ok) {
@@ -204,26 +137,10 @@ export function ProjectWorkspace(props: {
     await loadProject();
   }
 
-  async function postComment() {
-    if (!newComment.trim()) return;
-    setSaving(true);
-    const response = await fetch(`/api/projects/${props.projectId}/comments`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ body: newComment.trim() }),
-    });
-    setSaving(false);
-    if (!response.ok) {
-      const body = (await response.json().catch(() => ({}))) as { error?: string };
-      setError(body.error ?? "コメント投稿に失敗しました。");
+  async function inviteMember() {
+    if (!inviteEmail.trim()) {
       return;
     }
-    setNewComment("");
-    await loadComments();
-  }
-
-  async function inviteMember() {
-    if (!inviteEmail.trim()) return;
     setSaving(true);
     setError(null);
     const response = await fetch(`/api/projects/${props.projectId}/invite`, {
@@ -244,26 +161,6 @@ export function ProjectWorkspace(props: {
     await loadMembers();
   }
 
-  async function exportProjectPdf() {
-    setSaving(true);
-    setError(null);
-    const response = await fetch(`/api/projects/${props.projectId}/export/pdf`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        includeComments: true,
-      }),
-    });
-    setSaving(false);
-    if (!response.ok) {
-      const body = (await response.json().catch(() => ({}))) as { error?: string };
-      setError(body.error ?? "PDF出力に失敗しました。");
-      return;
-    }
-    await loadDeliverables();
-    setTab("delivery");
-  }
-
   return (
     <div className="space-y-4">
       <section className="panel p-5">
@@ -277,7 +174,12 @@ export function ProjectWorkspace(props: {
           <div className="flex flex-wrap items-center gap-2">
             <span className="badge">{data.project.status}</span>
             {data.project.drive_folder_url ? (
-              <a className="btn-outline text-sm" href={data.project.drive_folder_url} target="_blank" rel="noreferrer">
+              <a
+                className="btn-outline text-sm"
+                href={data.project.drive_folder_url}
+                target="_blank"
+                rel="noreferrer"
+              >
                 Driveフォルダを開く
               </a>
             ) : null}
@@ -322,173 +224,42 @@ export function ProjectWorkspace(props: {
         </div>
       </section>
 
-      <nav className="tabs">
-        {(Object.keys({
-          storyboard: true,
-          lighting: true,
-          comments: true,
-          delivery: true,
-        }) as TabKey[]).map((tabKey) => (
-          <button
-            key={tabKey}
-            className={`tab-link ${tab === tabKey ? "active" : ""}`}
-            onClick={() => {
-              void switchTab(tabKey);
-            }}
-            type="button"
-          >
-            {tabLabel(tabKey)}
-          </button>
-        ))}
-      </nav>
-
       {error ? <p className="text-sm text-[var(--danger)]">{error}</p> : null}
 
-      {tab === "storyboard" ? (
-        <section className="space-y-4">
-          <div className="panel flex flex-wrap items-center gap-2 p-4">
-            <input
-              className="input max-w-sm"
-              placeholder="新しいシーン名"
-              value={newSceneTitle}
-              onChange={(event) => setNewSceneTitle(event.target.value)}
-            />
-            <button className="btn-primary" type="button" onClick={addScene} disabled={saving}>
-              シーン追加
-            </button>
-          </div>
+      <section className="panel flex flex-wrap items-center gap-2 p-4">
+        <input
+          className="input max-w-sm"
+          placeholder="新しいキャラ名"
+          value={newCharacterTitle}
+          onChange={(event) => setNewCharacterTitle(event.target.value)}
+        />
+        <button className="btn-primary" type="button" onClick={addCharacter} disabled={saving}>
+          キャラ追加
+        </button>
+      </section>
 
-          {data.scenes.map((scene) => (
-            <SceneCard
-              key={scene.id}
-              scene={scene}
-              saving={saving}
-              onAddShot={addShot}
-              onMoveShot={moveShot}
-              onUpdateShotStatus={updateShotStatus}
-            />
-          ))}
-        </section>
-      ) : null}
-
-      {tab === "lighting" ? (
-        <section className="panel p-5">
-          <h3 className="mb-2 text-lg font-bold">ライティング編集対象</h3>
-          <p className="muted mb-4 text-sm">
-            各ショット詳細で配置図を作成・保存できます。PNG書き出しにも対応しています。
-          </p>
-          <div className="space-y-2">
-            {allShots.map((shot) => (
-              <div
-                key={shot.id}
-                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--border)] bg-white p-3"
-              >
-                <div>
-                  <p className="font-semibold">{shot.title}</p>
-                  <span className={`badge status-${shot.status}`}>{shot.status}</span>
-                </div>
-                <Link className="btn-outline text-sm" href={`/projects/${props.projectId}/shots/${shot.id}`}>
-                  ライティング編集
-                </Link>
-              </div>
-            ))}
-          </div>
-        </section>
-      ) : null}
-
-      {tab === "comments" ? (
-        <section className="panel space-y-4 p-5">
-          <h3 className="text-lg font-bold">プロジェクトコメント</h3>
-          <div className="space-y-3">
-            {comments.map((comment) => (
-              <article key={comment.id} className="rounded-lg border border-[var(--border)] bg-white p-3">
-                <p className="text-sm font-semibold">
-                  {comment.user?.display_name ?? "メンバー"}{" "}
-                  <span className="muted font-normal">
-                    {new Date(comment.created_at).toLocaleString()}
-                  </span>
-                </p>
-                <p className="mt-1 whitespace-pre-wrap text-sm">{comment.body}</p>
-              </article>
-            ))}
-            {comments.length === 0 ? <p className="muted text-sm">コメントはまだありません。</p> : null}
-          </div>
-          <div className="space-y-2">
-            <textarea
-              className="textarea"
-              placeholder="コメントを書く"
-              value={newComment}
-              onChange={(event) => setNewComment(event.target.value)}
-            />
-            <button className="btn-primary" type="button" onClick={postComment} disabled={saving}>
-              送信
-            </button>
-          </div>
-        </section>
-      ) : null}
-
-      {tab === "delivery" ? (
-        <section className="panel p-5">
-          <h3 className="text-lg font-bold">納品チェック</h3>
-          <p className="muted mt-1 text-sm">
-            ステータスを「共有済」にしたショットが納品候補です。
-          </p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <button className="btn-primary text-sm" type="button" onClick={exportProjectPdf} disabled={saving}>
-              {saving ? "生成中..." : "絵コンテPDFを生成"}
-            </button>
-            <button className="btn-outline text-sm" type="button" onClick={() => void loadDeliverables()}>
-              納品物を更新
-            </button>
-          </div>
-
-          <div className="mt-4 grid-cards">
-            {allShots
-              .filter((shot) => shot.status === "共有済")
-              .map((shot) => (
-                <div key={shot.id} className="rounded-lg border border-[var(--border)] bg-white p-3">
-                  <p className="font-semibold">{shot.title}</p>
-                  <Link className="link text-sm" href={`/projects/${props.projectId}/shots/${shot.id}`}>
-                    ショット詳細へ
-                  </Link>
-                </div>
-              ))}
-          </div>
-          {allShots.every((shot) => shot.status !== "共有済") ? (
-            <p className="muted mt-3 text-sm">共有済ショットはまだありません。</p>
-          ) : null}
-
-          <div className="mt-6 space-y-2">
-            <h4 className="text-base font-bold">出力済み納品物</h4>
-            {deliverables.map((deliverable) => (
-              <article
-                key={deliverable.id}
-                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--border)] bg-white p-3"
-              >
-                <div>
-                  <p className="font-semibold">{deliverable.drive_file_name}</p>
-                  <p className="muted text-xs">
-                    {deliverable.kind} / {new Date(deliverable.created_at).toLocaleString()}
-                  </p>
-                </div>
-                {deliverable.drive_web_view_link ? (
-                  <a className="btn-outline text-sm" href={deliverable.drive_web_view_link} target="_blank" rel="noreferrer">
-                    Driveで開く
-                  </a>
-                ) : null}
-              </article>
-            ))}
-            {deliverables.length === 0 ? (
-              <p className="muted text-sm">まだ納品物はありません。</p>
-            ) : null}
-          </div>
-        </section>
-      ) : null}
+      <section className="space-y-4">
+        {data.scenes.map((scene) => (
+          <CharacterCard
+            key={scene.id}
+            scene={scene}
+            saving={saving}
+            onAddShot={addShot}
+            onMoveShot={moveShot}
+            onUpdateShotStatus={updateShotStatus}
+          />
+        ))}
+        {data.scenes.length === 0 ? (
+          <section className="panel p-5">
+            <p className="muted text-sm">キャラがまだありません。</p>
+          </section>
+        ) : null}
+      </section>
     </div>
   );
 }
 
-function SceneCard(props: {
+function CharacterCard(props: {
   scene: Scene;
   saving: boolean;
   onAddShot: (sceneId: string, title: string) => Promise<void>;
@@ -501,7 +272,7 @@ function SceneCard(props: {
     <section className="panel p-4">
       <div className="mb-3 flex items-center justify-between gap-2">
         <h3 className="text-lg font-bold">{props.scene.title}</h3>
-        <span className="muted text-xs">シーン内ショット: {(props.scene.shots ?? []).length}</span>
+        <span className="muted text-xs">キャラ内ショット: {(props.scene.shots ?? []).length}</span>
       </div>
 
       <div className="mb-4 flex flex-wrap items-center gap-2">

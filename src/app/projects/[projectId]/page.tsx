@@ -3,37 +3,14 @@ import { ProjectWorkspace } from "@/components/project-workspace";
 import { TopNav } from "@/components/top-nav";
 import { ensureProfileForUser } from "@/lib/auth";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import {
-  getProjectComments,
-  getProjectDeliverables,
-  getProjectDetailById,
-  getProjectMembers,
-} from "@/lib/server-data";
-import type { ProjectTabKey } from "@/types/app";
+import { getProjectDetailById, getProjectMembers } from "@/lib/server-data";
 
 export const dynamic = "force-dynamic";
 
-function resolveTab(
-  tab: string | string[] | undefined,
-): ProjectTabKey {
-  const first = Array.isArray(tab) ? tab[0] : tab;
-  if (
-    first === "storyboard" ||
-    first === "lighting" ||
-    first === "comments" ||
-    first === "delivery"
-  ) {
-    return first;
-  }
-  return "storyboard";
-}
-
 export default async function ProjectDetailPage(props: {
   params: Promise<{ projectId: string }>;
-  searchParams: Promise<{ tab?: string | string[] }>;
 }) {
   const params = await props.params;
-  const searchParams = await props.searchParams;
 
   const supabase = await createServerSupabaseClient();
   const {
@@ -44,19 +21,13 @@ export default async function ProjectDetailPage(props: {
   }
   let loadError: string | null = null;
   let detail: Awaited<ReturnType<typeof getProjectDetailById>> | null = null;
-  let comments: Awaited<ReturnType<typeof getProjectComments>> = [];
   let members: Awaited<ReturnType<typeof getProjectMembers>> = [];
-  let deliverables: Awaited<ReturnType<typeof getProjectDeliverables>> = [];
 
   try {
     await ensureProfileForUser(supabase, user);
     detail = await getProjectDetailById(supabase, params.projectId);
     if (detail) {
-      [comments, members, deliverables] = await Promise.all([
-        getProjectComments(supabase, params.projectId),
-        getProjectMembers(supabase, params.projectId),
-        getProjectDeliverables(supabase, params.projectId),
-      ]);
+      members = await getProjectMembers(supabase, params.projectId);
     }
   } catch (error) {
     loadError =
@@ -85,14 +56,11 @@ export default async function ProjectDetailPage(props: {
 
   return (
     <main className="page">
-      <TopNav title={detail.project.title} subtitle="絵コンテ / ライティング / コメント / 納品" />
+      <TopNav title={detail.project.title} subtitle="キャラ管理 / ショット管理" />
       <ProjectWorkspace
         projectId={params.projectId}
-        initialTab={resolveTab(searchParams.tab)}
         initialData={detail}
-        initialComments={comments}
         initialMembers={members}
-        initialDeliverables={deliverables}
       />
     </main>
   );

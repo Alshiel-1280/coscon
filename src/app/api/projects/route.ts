@@ -82,7 +82,7 @@ export async function POST(request: NextRequest) {
 
     await supabase.from("scenes").insert({
       project_id: projectId,
-      title: "Scene 1",
+      title: "キャラ1",
       sort_order: 0,
     });
 

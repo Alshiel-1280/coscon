@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { FormEvent, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 import { SHOT_STATUSES } from "@/lib/constants";
 import type { Comment, LightingDiagram, Shot, ShotAsset } from "@/types/app";
 
@@ -22,6 +22,31 @@ type SaveMessage = {
   message: string;
 };
 
+const ALLOWED_REFERENCE_MIME_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "application/pdf",
+]);
+
+function isAllowedReferenceFile(file: File): boolean {
+  const mimeType = file.type.toLowerCase();
+  if (ALLOWED_REFERENCE_MIME_TYPES.has(mimeType)) {
+    return true;
+  }
+
+  const lowerName = file.name.toLowerCase();
+  return (
+    lowerName.endsWith(".jpg") ||
+    lowerName.endsWith(".jpeg") ||
+    lowerName.endsWith(".png") ||
+    lowerName.endsWith(".pdf")
+  );
+}
+
+function drivePreviewUrl(asset: ShotAsset): string {
+  return `https://drive.google.com/file/d/${asset.drive_file_id}/preview`;
+}
+
 export function ShotDetailWorkspace(props: {
   projectId: string;
   projectTitle: string;
@@ -40,6 +65,11 @@ export function ShotDetailWorkspace(props: {
   const [uploading, setUploading] = useState(false);
   const [postingComment, setPostingComment] = useState(false);
   const [commentBody, setCommentBody] = useState("");
+  const [previewAsset, setPreviewAsset] = useState<ShotAsset | null>(null);
+  const referenceAssets = useMemo(
+    () => assets.filter((asset) => asset.kind === "reference"),
+    [assets],
+  );
 
   async function loadShot() {
     const response = await fetch(`/api/shots/${shot.id}`, { cache: "no-store" });
@@ -101,24 +131,64 @@ export function ShotDetailWorkspace(props: {
 
   async function uploadAsset(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setUploading(true);
-    setMessage(null);
     const formData = new FormData(event.currentTarget);
-    const response = await fetch(`/api/shots/${shot.id}/assets`, {
-      method: "POST",
-      body: formData,
-    });
-    const body = (await response.json().catch(() => ({}))) as { error?: string };
-    setUploading(false);
-    if (!response.ok) {
+    const files = formData
+      .getAll("files")
+      .filter((item): item is File => item instanceof File && item.size > 0);
+
+    if (files.length === 0) {
       setMessage({
         kind: "error",
-        message: body.error ?? "画像アップロードに失敗しました。",
+        message: "アップロードするファイルを選択してください。",
       });
       return;
     }
+
+    if (referenceAssets.length + files.length > 3) {
+      setMessage({
+        kind: "error",
+        message: "参考画像は最大3枚までです。",
+      });
+      return;
+    }
+
+    const invalidFile = files.find((file) => !isAllowedReferenceFile(file));
+    if (invalidFile) {
+      setMessage({
+        kind: "error",
+        message: "アップロード可能なのは JPG / PNG / PDF のみです。",
+      });
+      return;
+    }
+
+    setUploading(true);
+    setMessage(null);
+
+    try {
+      for (const file of files) {
+        const uploadFormData = new FormData();
+        uploadFormData.set("file", file);
+        const response = await fetch(`/api/shots/${shot.id}/assets`, {
+          method: "POST",
+          body: uploadFormData,
+        });
+        const body = (await response.json().catch(() => ({}))) as { error?: string };
+        if (!response.ok) {
+          throw new Error(body.error ?? "画像アップロードに失敗しました。");
+        }
+      }
+    } catch (error) {
+      setUploading(false);
+      setMessage({
+        kind: "error",
+        message: error instanceof Error ? error.message : "画像アップロードに失敗しました。",
+      });
+      return;
+    }
+
+    setUploading(false);
     await loadShot();
-    setMessage({ kind: "success", message: "画像をアップロードしました。" });
+    setMessage({ kind: "success", message: `${files.length}件の参考画像をアップロードしました。` });
     event.currentTarget.reset();
   }
 
@@ -221,7 +291,7 @@ export function ShotDetailWorkspace(props: {
             </select>
           </div>
           <div>
-            <label className="mb-1 block text-sm font-semibold">シーン</label>
+            <label className="mb-1 block text-sm font-semibold">キャラ</label>
             <select className="select" name="sceneId" defaultValue={shot.scene_id}>
               {props.scenes.map((scene) => (
                 <option key={scene.id} value={scene.id}>
@@ -245,19 +315,20 @@ export function ShotDetailWorkspace(props: {
         </form>
 
         <div className="panel space-y-3 p-5">
-          <h3 className="text-lg font-bold">参考画像 / 納品画像</h3>
+          <h3 className="text-lg font-bold">参考画像</h3>
+          <p className="muted text-xs">形式: JPG / PNG / PDF, 最大3枚</p>
+          <p className="muted text-xs">登録済み: {referenceAssets.length} / 3</p>
           <form className="space-y-2" onSubmit={uploadAsset}>
             <div>
-              <label className="mb-1 block text-xs font-semibold">種類</label>
-              <select className="select" name="kind" defaultValue="reference">
-                <option value="reference">参考画像 (JPG)</option>
-                <option value="edit">現像後 (JPG)</option>
-                <option value="export">書き出し</option>
-              </select>
-            </div>
-            <div>
               <label className="mb-1 block text-xs font-semibold">ファイル</label>
-              <input className="input" type="file" name="file" required />
+              <input
+                className="input"
+                type="file"
+                name="files"
+                accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf"
+                multiple
+                required
+              />
             </div>
             <button className="btn-primary text-sm" type="submit" disabled={uploading}>
               {uploading ? "アップロード中..." : "アップロード"}
@@ -265,18 +336,16 @@ export function ShotDetailWorkspace(props: {
           </form>
 
           <div className="space-y-2">
-            {assets.map((asset) => (
+            {referenceAssets.map((asset) => (
               <article key={asset.id} className="rounded-lg border border-[var(--border)] bg-white p-3">
                 <p className="text-sm font-semibold">{asset.drive_file_name}</p>
-                <p className="muted text-xs">種別: {asset.kind}</p>
-                {asset.drive_web_view_link ? (
-                  <a className="link text-sm" href={asset.drive_web_view_link} target="_blank" rel="noreferrer">
-                    Driveで開く
-                  </a>
-                ) : null}
+                <p className="muted text-xs">{asset.mime_type}</p>
+                <button className="btn-outline mt-2 text-sm" type="button" onClick={() => setPreviewAsset(asset)}>
+                  プレビュー
+                </button>
               </article>
             ))}
-            {assets.length === 0 ? <p className="muted text-sm">アセットはまだありません。</p> : null}
+            {referenceAssets.length === 0 ? <p className="muted text-sm">参考画像はまだありません。</p> : null}
           </div>
         </div>
       </section>
@@ -318,6 +387,38 @@ export function ShotDetailWorkspace(props: {
           </button>
         </div>
       </section>
+
+      {previewAsset ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          role="dialog"
+          aria-modal="true"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) {
+              setPreviewAsset(null);
+            }
+          }}
+        >
+          <section className="panel w-full max-w-4xl space-y-3 p-4">
+            <div className="flex items-center justify-between gap-2">
+              <p className="font-semibold">{previewAsset.drive_file_name}</p>
+              <button className="btn-outline text-sm" type="button" onClick={() => setPreviewAsset(null)}>
+                閉じる
+              </button>
+            </div>
+            <iframe
+              src={drivePreviewUrl(previewAsset)}
+              title={`reference-preview-${previewAsset.id}`}
+              className="h-[70vh] w-full rounded-lg border border-[var(--border)] bg-white"
+            />
+            {previewAsset.drive_web_view_link ? (
+              <a className="link text-sm" href={previewAsset.drive_web_view_link} target="_blank" rel="noreferrer">
+                Driveで開く
+              </a>
+            ) : null}
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }
