@@ -3,20 +3,18 @@
 import Link from "next/link";
 import { useState } from "react";
 import { SHOT_STATUSES } from "@/lib/constants";
-import type { ProjectDetail, ProjectMember, Scene } from "@/types/app";
+import type { ProjectDetail, Scene } from "@/types/app";
 
 export function ProjectWorkspace(props: {
   projectId: string;
   initialData: ProjectDetail;
-  initialMembers: ProjectMember[];
+  canIssueInviteLink: boolean;
 }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [data, setData] = useState<ProjectDetail>(props.initialData);
-  const [members, setMembers] = useState<ProjectMember[]>(props.initialMembers);
   const [newCharacterTitle, setNewCharacterTitle] = useState("");
-  const [inviteEmail, setInviteEmail] = useState("");
   const [inviteLink, setInviteLink] = useState("");
   const [inviteWarning, setInviteWarning] = useState("");
   const [issuingInviteLink, setIssuingInviteLink] = useState(false);
@@ -34,21 +32,6 @@ export function ProjectWorkspace(props: {
       return;
     }
     setData(body.data);
-  }
-
-  async function loadMembers() {
-    const response = await fetch(`/api/projects/${props.projectId}/members`, {
-      cache: "no-store",
-    });
-    const body = (await response.json().catch(() => ({}))) as {
-      data?: ProjectMember[];
-      error?: string;
-    };
-    if (!response.ok || !body.data) {
-      setError(body.error ?? "メンバー取得に失敗しました。");
-      return;
-    }
-    setMembers(body.data);
   }
 
   async function addCharacter() {
@@ -144,31 +127,6 @@ export function ProjectWorkspace(props: {
     await loadProject();
   }
 
-  async function inviteMember() {
-    if (!inviteEmail.trim()) {
-      return;
-    }
-    setSaving(true);
-    setError(null);
-    setNotice(null);
-    const response = await fetch(`/api/projects/${props.projectId}/invite`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        email: inviteEmail.trim().toLowerCase(),
-      }),
-    });
-    setSaving(false);
-    if (!response.ok) {
-      const body = (await response.json().catch(() => ({}))) as { error?: string };
-      setError(body.error ?? "招待に失敗しました。");
-      return;
-    }
-    setInviteEmail("");
-    setNotice("メンバーを招待しました。");
-    await loadMembers();
-  }
-
   async function issueInviteLink() {
     setIssuingInviteLink(true);
     setError(null);
@@ -229,60 +187,32 @@ export function ProjectWorkspace(props: {
         </div>
       </section>
 
-      <section className="panel space-y-3 p-5">
-        <h3 className="text-lg font-bold">招待リンク発行</h3>
-        <p className="text-sm text-[var(--danger)]">
-          このリンクを知っている人は誰でもプロジェクト参加とDriveフォルダ編集が可能です。
-        </p>
-        <p className="text-sm text-[var(--danger)]">
-          リンクを再発行すると、旧リンクは無効になります。
-        </p>
-        <div className="flex flex-wrap items-center gap-2">
-          <button className="btn-primary" type="button" onClick={issueInviteLink} disabled={issuingInviteLink}>
-            {issuingInviteLink ? "発行中..." : inviteLink ? "リンクを再発行" : "リンクを発行"}
-          </button>
-          <button className="btn-outline text-sm" type="button" onClick={copyInviteLink} disabled={!inviteLink}>
-            コピー
-          </button>
-        </div>
-        <input
-          className="input"
-          readOnly
-          value={inviteLink}
-          placeholder="まだ招待リンクは発行されていません。"
-        />
-        {inviteWarning ? <p className="muted text-xs">{inviteWarning}</p> : null}
-      </section>
-
-      <section className="panel space-y-3 p-5">
-        <h3 className="text-lg font-bold">メンバー招待</h3>
-        <p className="muted text-xs">招待メンバーは全員「編集者」で追加されます。</p>
-        <div className="flex flex-wrap items-center gap-2">
+      {props.canIssueInviteLink ? (
+        <section className="panel space-y-3 p-5">
+          <h3 className="text-lg font-bold">招待リンク発行</h3>
+          <p className="text-sm text-[var(--danger)]">
+            このリンクを知っている人は誰でもプロジェクト参加とDriveフォルダ編集が可能です。
+          </p>
+          <p className="text-sm text-[var(--danger)]">
+            リンクを再発行すると、旧リンクは無効になります。
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <button className="btn-primary" type="button" onClick={issueInviteLink} disabled={issuingInviteLink}>
+              {issuingInviteLink ? "発行中..." : inviteLink ? "リンクを再発行" : "リンクを発行"}
+            </button>
+            <button className="btn-outline text-sm" type="button" onClick={copyInviteLink} disabled={!inviteLink}>
+              コピー
+            </button>
+          </div>
           <input
-            className="input max-w-sm"
-            type="email"
-            placeholder="招待するメールアドレス"
-            value={inviteEmail}
-            onChange={(event) => setInviteEmail(event.target.value)}
+            className="input"
+            readOnly
+            value={inviteLink}
+            placeholder="まだ招待リンクは発行されていません。"
           />
-          <button className="btn-primary" type="button" onClick={inviteMember} disabled={saving}>
-            招待
-          </button>
-          <button className="btn-outline text-sm" type="button" onClick={() => void loadMembers()}>
-            更新
-          </button>
-        </div>
-        <div className="grid-cards">
-          {members.map((member) => (
-            <article key={member.user_id} className="rounded-lg border border-[var(--border)] bg-white p-3">
-              <p className="font-semibold">{member.profile?.display_name ?? member.profile?.email ?? member.user_id}</p>
-              <p className="muted text-sm">{member.profile?.email ?? "-"}</p>
-              <span className="badge mt-2">{member.role}</span>
-            </article>
-          ))}
-          {members.length === 0 ? <p className="muted text-sm">メンバー情報がありません。</p> : null}
-        </div>
-      </section>
+          {inviteWarning ? <p className="muted text-xs">{inviteWarning}</p> : null}
+        </section>
+      ) : null}
 
       {notice ? <p className="text-sm text-[var(--success)]">{notice}</p> : null}
       {error ? <p className="text-sm text-[var(--danger)]">{error}</p> : null}

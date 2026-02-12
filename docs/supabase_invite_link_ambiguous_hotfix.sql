@@ -52,11 +52,11 @@ begin
   into v_already_member;
 
   insert into public.project_members (project_id, user_id, role, added_by)
-  values (v_project_id, v_user_id, 'editor', null)
+  values (v_project_id, v_user_id, 'editor'::member_role, null)
   on conflict (project_id, user_id) do update
   set role = case
-    when public.project_members.role = 'owner' then 'owner'
-    else 'editor'
+    when public.project_members.role = 'owner'::member_role then 'owner'::member_role
+    else 'editor'::member_role
   end;
 
   if not v_already_member then

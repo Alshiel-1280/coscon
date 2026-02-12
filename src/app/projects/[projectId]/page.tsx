@@ -21,13 +21,16 @@ export default async function ProjectDetailPage(props: {
   }
   let loadError: string | null = null;
   let detail: Awaited<ReturnType<typeof getProjectDetailById>> | null = null;
-  let members: Awaited<ReturnType<typeof getProjectMembers>> = [];
+  let canIssueInviteLink = false;
 
   try {
     await ensureProfileForUser(supabase, user);
     detail = await getProjectDetailById(supabase, params.projectId);
     if (detail) {
-      members = await getProjectMembers(supabase, params.projectId);
+      const members = await getProjectMembers(supabase, params.projectId);
+      canIssueInviteLink = members.some(
+        (member) => member.user_id === user.id && member.role === "owner",
+      );
     }
   } catch (error) {
     loadError =
@@ -60,7 +63,7 @@ export default async function ProjectDetailPage(props: {
       <ProjectWorkspace
         projectId={params.projectId}
         initialData={detail}
-        initialMembers={members}
+        canIssueInviteLink={canIssueInviteLink}
       />
     </main>
   );

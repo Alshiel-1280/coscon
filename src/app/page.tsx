@@ -38,7 +38,7 @@ export default async function Home() {
           <article className="rounded-xl border border-[var(--border)] bg-white p-4">
             <h2 className="text-base font-bold">主な機能</h2>
             <p className="muted mt-2 text-sm">
-              キャラごとのショット管理、参考画像アップロード、ライティング図面編集、メンバー招待に対応しています。
+              キャラごとのショット管理、参考画像アップロード、ライティング図面編集、招待リンク参加に対応しています。
             </p>
           </article>
           <article className="rounded-xl border border-[var(--border)] bg-white p-4">
