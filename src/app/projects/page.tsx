@@ -15,8 +15,17 @@ export default async function ProjectsPage() {
   if (!user) {
     redirect("/login");
   }
-  await ensureProfileForUser(supabase, user);
-  const projects = await getProjectsForUser(supabase);
+  let projects: Awaited<ReturnType<typeof getProjectsForUser>> = [];
+  let loadError: string | null = null;
+  try {
+    await ensureProfileForUser(supabase, user);
+    projects = await getProjectsForUser(supabase);
+  } catch (error) {
+    loadError =
+      error instanceof Error
+        ? error.message
+        : "Failed to load projects due to an unknown server error.";
+  }
 
   return (
     <main className="page">
@@ -29,6 +38,17 @@ export default async function ProjectsPage() {
           </Link>
         }
       />
+
+      {loadError ? (
+        <section className="panel mb-4 p-6">
+          <h2 className="text-lg font-bold">プロジェクト一覧の読み込みに失敗しました</h2>
+          <p className="mt-2 text-sm text-[var(--danger)]">{loadError}</p>
+          <p className="muted mt-2 text-sm">
+            Supabaseで `/Users/ryo1280/codex/coscon/docs/supabase_schema.sql`
+            を再適用すると解消するケースが多いです。
+          </p>
+        </section>
+      ) : null}
 
       <section className="grid-cards">
         {projects.map((project) => (

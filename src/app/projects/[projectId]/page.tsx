@@ -42,17 +42,46 @@ export default async function ProjectDetailPage(props: {
   if (!user) {
     redirect("/login");
   }
-  await ensureProfileForUser(supabase, user);
+  let loadError: string | null = null;
+  let detail: Awaited<ReturnType<typeof getProjectDetailById>> | null = null;
+  let comments: Awaited<ReturnType<typeof getProjectComments>> = [];
+  let members: Awaited<ReturnType<typeof getProjectMembers>> = [];
+  let deliverables: Awaited<ReturnType<typeof getProjectDeliverables>> = [];
 
-  const detail = await getProjectDetailById(supabase, params.projectId);
+  try {
+    await ensureProfileForUser(supabase, user);
+    detail = await getProjectDetailById(supabase, params.projectId);
+    if (detail) {
+      [comments, members, deliverables] = await Promise.all([
+        getProjectComments(supabase, params.projectId),
+        getProjectMembers(supabase, params.projectId),
+        getProjectDeliverables(supabase, params.projectId),
+      ]);
+    }
+  } catch (error) {
+    loadError =
+      error instanceof Error ? error.message : "Unknown error while loading project.";
+  }
+
+  if (loadError) {
+    return (
+      <main className="page">
+        <TopNav title="プロジェクト詳細" subtitle="読み込みエラー" />
+        <section className="panel p-6">
+          <h2 className="text-lg font-bold">プロジェクト詳細の読み込みに失敗しました</h2>
+          <p className="mt-2 text-sm text-[var(--danger)]">{loadError}</p>
+          <p className="muted mt-2 text-sm">
+            Supabaseで `/Users/ryo1280/codex/coscon/docs/supabase_schema.sql`
+            を再適用して再度ログインしてください。
+          </p>
+        </section>
+      </main>
+    );
+  }
+
   if (!detail) {
     notFound();
   }
-  const [comments, members, deliverables] = await Promise.all([
-    getProjectComments(supabase, params.projectId),
-    getProjectMembers(supabase, params.projectId),
-    getProjectDeliverables(supabase, params.projectId),
-  ]);
 
   return (
     <main className="page">

@@ -18,13 +18,36 @@ export default async function ShotDetailPage(props: {
   if (!user) {
     redirect("/login");
   }
-  await ensureProfileForUser(supabase, user);
+  let loadError: string | null = null;
+  let workspace: Awaited<ReturnType<typeof getShotWorkspace>> | null = null;
+  let comments: Awaited<ReturnType<typeof getShotComments>> = [];
 
-  const workspace = await getShotWorkspace(supabase, params.shotId);
+  try {
+    await ensureProfileForUser(supabase, user);
+    workspace = await getShotWorkspace(supabase, params.shotId);
+    if (workspace && workspace.project.id === params.projectId) {
+      comments = await getShotComments(supabase, params.shotId);
+    }
+  } catch (error) {
+    loadError =
+      error instanceof Error ? error.message : "Unknown error while loading shot.";
+  }
+
+  if (loadError) {
+    return (
+      <main className="page">
+        <TopNav title="ショット詳細" subtitle="読み込みエラー" />
+        <section className="panel p-6">
+          <h2 className="text-lg font-bold">ショット詳細の読み込みに失敗しました</h2>
+          <p className="mt-2 text-sm text-[var(--danger)]">{loadError}</p>
+        </section>
+      </main>
+    );
+  }
+
   if (!workspace || workspace.project.id !== params.projectId) {
     notFound();
   }
-  const comments = await getShotComments(supabase, params.shotId);
 
   return (
     <main className="page">

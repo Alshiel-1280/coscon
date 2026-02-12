@@ -8,6 +8,11 @@ export type AuthenticatedContext = {
   googleAccessToken: string | null;
 };
 
+type DbError = {
+  message: string;
+  code?: string;
+};
+
 function inferDisplayName(user: User): string {
   const md = user.user_metadata ?? {};
   return (
@@ -29,6 +34,19 @@ function inferGoogleSub(user: User): string {
     return googleIdentity.identity_id;
   }
   return user.id;
+}
+
+function formatProfileSyncError(error: DbError): string {
+  if (error.code === "42P01") {
+    return "profiles table is missing. Apply docs/supabase_schema.sql in Supabase SQL Editor.";
+  }
+  if (error.code === "42501") {
+    return "Permission denied by RLS while syncing profile. Re-apply RLS policies in docs/supabase_schema.sql.";
+  }
+  if (error.code === "23505") {
+    return "Profile unique key conflict (email/google_sub). Check duplicates in profiles table.";
+  }
+  return error.message;
 }
 
 export async function ensureProfileForUser(
@@ -53,7 +71,8 @@ export async function ensureProfileForUser(
   );
 
   if (error) {
-    throw new Error(`Failed to sync user profile: ${error.message}`);
+    const reason = formatProfileSyncError(error as DbError);
+    throw new Error(`Failed to sync user profile: ${reason}`);
   }
 }
 
